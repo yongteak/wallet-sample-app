@@ -1,58 +1,54 @@
 -- Copyright (c) 2021 Digital Asset (Switzerland) GmbH and/or its affiliates. All rights reserved.
 -- SPDX-License-Identifier: Apache-2.0
 
--- A simple asset with issuer and owner.
--- This module is intended to be used in conjunction with Account module, which implements the account for holding assets
--- An Asset contract can be created without corresponding AssetHoldingAccount contract, however all manipulation
--- of the asset (transfer etc.) can only be done through corresponding account
-
+-- 발행자와 소유자가 있는 간단한 자산입니다.
+-- 이 모듈은 자산을 보유하기 위한 계정을 구현하는 계정 모듈(Account module)과 함께 사용하기 위한 것입니다. 
+-- 자산 컨트랙트(Asset contract)는 해당 AssetHoldingAccount(자산 보유 계정) 컨트랙트 없이도 생성할 수 있지만, 
+-- 자산의 모든 조작(전송 등)은 해당 계정을 통해서만 할 수 있습니다. (can only be done through corresponding account)
 module Asset where
 
 import DA.Set as Set
 
--- Asset type is identified by a combination of issuer, symbol, fungible and reference properties.
--- Optional reference field can be used for purposes like
--- identifying a specific item in a run of non-fungible tokens.
+-- 자산(Asset) 유형은 발행자(issuer), 심볼(symbol), 대체 가능(fungible) 및 참조(reference) 속성의 조합으로 식별됩니다.
+-- 선택적 참조(reference) 필드는 대체 불가능(non-fungible)한 토큰 실행에서 특정 항목을 식별하는 등의 목적으로 사용할 수 있습니다.
 data AssetType = AssetType with
-    -- The issuer of the asset.
+    -- 자산 발행자
     issuer: Party
-    -- A symbol for the asset. Uniquely identifies the type of asset amongst
-    -- those issued by the issuer
+    -- 자산의 심볼입니다. 발행자가 발행한 자산 중 자산의 유형을 고유하게 식별합니다.
     symbol: Text
-    -- Is the asset fungible, i.e. can it be split and merged
+    -- 자산이 대체 가능한지, 즉 분할 및 병합이 가능한지 구분
     fungible : Bool
-    -- A possible reference for NFTs and the like
+    -- NFT 등에 대한 가능한 참고 자료 (예, Limit Edition Ver1)
     reference : Optional Text     
   deriving (Eq, Show)
-  
--- The Asset template represents an asset holding.
--- An Asset is co-signed by the issuer and the owner.
--- Thus, an Asset is a contract between issuer and owner and can 
--- represent assets as well as liabilities.
+
+-- 자산(Asset) 템플릿은 자산 보유(asset holding)를 나타냅니다.
+-- 자산(Asset)은 발행자와 소유자가 공동 서명(co-signed)합니다.
+-- 따라서 자산은 발행자와 소유자 간의 계약이며 자산(assets)뿐만 아니라 부채(liabilities)도 나타낼 수 있습니다.
 template Asset with
     assetType : AssetType
-    -- The asset owner
+    -- 자산 소유자
     owner : Party
-    -- The amount of the asset
+    -- 자산 수량
     amount : Decimal
+    -- 타입: Set Party는 Party 타입의 값들의 집합을 나타냅니다. Set은 중복 없이 여러 값을 저장할 수 있는 데이터 구조입니다.
     observers : Set Party
   where
     signatory assetType.issuer, owner
     observer observers
     ensure (if assetType.fungible then amount>0.0 else (amount==1.0))
 
--- The AssetTransfer template represents an asset in transfer. When a transfer is created, the asset contract,
--- which is the source of funds for the transfer, is archived, so it cannot be used to create other transfers.
--- AssetTransfer contract cannot be created by asset owner using "create" command because this requires the
--- authority of the issuer. AssetTransfer can only be created by exercising Create_Transfers choice on
--- AssetHoldingAccount template, which provides the authority of both asset issuer and asset owner.
--- The template provides transfer originator with a choice to cancel the transfer.
--- It also provides the recipient with a choice to accept or reject the transfer.
+-- AssetTransfer(자산 전송) 템플릿은 전송 중인 자산을 나타냅니다(represents an asset in transfer). 
+-- transfer(전송)이 생성되면 전송의 자금 출처인 자산 계약이 보관(archived)되므로 다른 전송을 생성하는 데 사용할 수 없습니다.
+-- 자산 소유자는 발행자의 권한이 필요하기 때문에 "create" 명령을 사용하여 AssetTransfer(자산 전송) 컨트랙트를 생성할 수 없습니다. 
+-- 자산 발행자와 자산 소유자 모두의 권한이 있는 AssetHoldingAccount(자산 보유 계정) 템플릿에서 Create_Transfers를 선택(choice)해야만 AssetTransfer(자산 전송)을 생성할 수 있습니다.
+-- 이 템플릿은 전송 발신자(originator)에게 전송을 취소(cancel)할 수 있는 선택(choice)권을 제공합니다.
+-- 수신자(recipient)에게도 전송을 수락(accept)하거나 거부(reject)할 수 있는 선택(choice)권을 제공합니다.
 template AssetTransfer
   with
-    -- The asset to be transferred.
+    -- 이전할 자산
     asset : Asset
-    -- The recepient of the transfer.
+    -- 송금 받는 사람
     recipient : Party
   where
     signatory (signatory asset)
@@ -70,9 +66,8 @@ template AssetTransfer
         create asset
 
     choice Accept_Transfer : ContractId Asset
-      -- Requiring the authority of both the recipient and the asset issuer ensures that transfer can only be accepted
-      -- by calling Deposit_Transfer_Into_Account choice on the AssetHoldingAccount template,
-      -- which in turn ensures one cannot accept asset transfer without having asset holding account
+      -- 수신자(recipient)와 자산 발행자(issuer) 모두의 권한이 필요하므로 AssetHoldingAccount(자산 보유 계정 템플릿)에서 
+      -- Deposit_Transfer_Into_Account 선택(choice)을 호출해야만 송금을 수락할 수 있으며, 자산 보유 계정이 없으면(without having asset holding account) 자산 송금을 수락할 수 없습니다.
       controller recipient, asset.assetType.issuer
       do
         create asset with
